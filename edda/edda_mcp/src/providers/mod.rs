@@ -128,7 +128,7 @@ impl CombinedProvider {
                 ProviderType::Databricks => {
                     if self.databricks.is_none() {
                         return Err(eyre::eyre!(
-                            "Databricks provider is required but not configured."
+                            "Databricks provider is required but not configured. Environment variables DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID must be set."
                         ));
                     }
                 }
