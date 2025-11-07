@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+
 #[derive(Clone)]
 pub struct IOProvider {
     tool_router: ToolRouter<Self>,
@@ -223,17 +224,15 @@ impl IOProvider {
             );
         }
 
-        // build ScreenshotOptions with defaults from config
+        // build ScreenshotOptions from config, using defaults for None fields
+        let defaults = edda_screenshot::ScreenshotOptions::default();
+        let default_cfg = crate::config::ScreenshotConfig::default();
+        let screenshot_cfg = screenshot_config.unwrap_or(&default_cfg);
+
         let options = edda_screenshot::ScreenshotOptions {
-            url: screenshot_config
-                .and_then(|c| c.url.clone())
-                .unwrap_or_else(|| "/".to_string()),
-            port: screenshot_config
-                .and_then(|c| c.port)
-                .unwrap_or(8000),
-            wait_time_ms: screenshot_config
-                .and_then(|c| c.wait_time_ms)
-                .unwrap_or(30000),
+            url: screenshot_cfg.url.clone().unwrap_or(defaults.url),
+            port: screenshot_cfg.port.unwrap_or(defaults.port),
+            wait_time_ms: screenshot_cfg.wait_time_ms.unwrap_or(defaults.wait_time_ms),
             env_vars: {
                 let mut vars = vec![];
                 if let Ok(host) = std::env::var("DATABRICKS_HOST") {

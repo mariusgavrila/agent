@@ -47,12 +47,19 @@ class MCPSession:
 
         if self.mcp_binary:
             server_params = StdioServerParameters(
-                command=self.mcp_binary, args=["--with-workspace-tools=true"], env=env
+                command=self.mcp_binary, args=["--with-workspace-tools=true", "--with-deployment=false"], env=env
             )
         else:
             server_params = StdioServerParameters(
                 command="cargo",
-                args=["run", "--manifest-path", str(self.mcp_manifest), "--", "--with-workspace-tools=true"],
+                args=[
+                    "run",
+                    "--manifest-path",
+                    str(self.mcp_manifest),
+                    "--",
+                    "--with-workspace-tools=true",
+                    "--with-deployment=false",
+                ],
                 env=env,
             )
 
