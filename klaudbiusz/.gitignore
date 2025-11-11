@@ -6,3 +6,15 @@ app/
 
 # Evaluation results (cleaned between runs, preserved in archive/)
 app-eval/
+
+# Old evaluation results and backups
+results/
+results_*/
+app copy/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
