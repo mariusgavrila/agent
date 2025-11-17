@@ -1,7 +1,7 @@
 import asyncio
+import json
 import logging
 import os
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +13,6 @@ import litellm
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
 from shared import ScaffoldTracker, Tracker, build_mcp_command, setup_logging, validate_mcp_manifest
 
 logger = logging.getLogger(__name__)
@@ -95,13 +94,39 @@ class LiteLLMAgent:
         if not self.suppress_logs:
             logger.info(f"Loaded {len(self.tools)} MCP tools")
 
+    def _clean_schema_for_databricks(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """Remove JSON schema fields that Databricks serving doesn't support."""
+        if not isinstance(schema, dict):
+            return schema
+
+        cleaned = {}
+        for key, value in schema.items():
+            if key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
+                if schema.get("type") == "integer":
+                    continue
+
+            if key == "input_examples":
+                continue
+
+            if isinstance(value, dict):
+                cleaned[key] = self._clean_schema_for_databricks(value)
+            elif isinstance(value, list):
+                cleaned[key] = [
+                    self._clean_schema_for_databricks(item) if isinstance(item, dict) else item for item in value
+                ]
+            else:
+                cleaned[key] = value
+
+        return cleaned
+
     def _convert_mcp_tool(self, mcp_tool) -> dict[str, Any]:
+        parameters = self._clean_schema_for_databricks(mcp_tool.inputSchema)
         return {
             "type": "function",
             "function": {
                 "name": mcp_tool.name,
                 "description": mcp_tool.description or "",
-                "parameters": mcp_tool.inputSchema,
+                "parameters": parameters,
             },
         }
 
@@ -346,7 +371,7 @@ def cli(
     prompt: str,
     app_name: str | None = None,
     model: str = "openrouter/minimax/minimax-m2",  # other good options: "openrouter/moonshotai/kimi-k2-thinking",  "gemini/gemini-2.5-pro",
-    # some open-weights platform provide openai/anthropic-like API that can be used like 
+    # some open-weights platform provide openai/anthropic-like API that can be used like
     # OPENAI_API_KEY=$DATABRICKS_TOKEN OPENAI_API_BASE=https://$DATABRICKS_HOST/serving-endpoints uv run cli/single_run.py "..." --backend=litellm --model="openai/databricks-gpt-oss-120b"
     # OPENAI_API_BASE="https://api.minimax.io/v1" OPENAI_API_KEY="$MINIMAX_API_KEY" uv run cli/single_run.py "..."" --backend=litellm --model="openai/MiniMax-M2"
     # ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic" ANTHROPIC_API_KEY="$MINIMAX_API_KEY" uv run cli/single_run.py "..." --backend=litellm --model="anthropic/MiniMax-M2"
