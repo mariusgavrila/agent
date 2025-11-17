@@ -135,6 +135,9 @@ def generate_summary_report(results: list[dict]) -> dict:
         "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "template_distribution": dict(template_counts),
         "metrics_summary": {
+            # Composite & Efficiency Metrics
+            "avg_appeval_100": sum(r["metrics"].get("appeval_100", 0) for r in results) / total if total > 0 else 0,
+            "avg_eff_units": sum(r["metrics"].get("eff_units", 0) for r in results if r["metrics"].get("eff_units") is not None) / len([r for r in results if r["metrics"].get("eff_units") is not None]) if len([r for r in results if r["metrics"].get("eff_units") is not None]) > 0 else None,
             # Metric 1-4: Core functionality
             "build_success": sum(1 for r in results if r["metrics"]["build_success"]),
             "runtime_success": sum(1 for r in results if r["metrics"]["runtime_success"]),
@@ -238,6 +241,13 @@ def generate_markdown_report(results: list[dict], summary: dict) -> str:
     md.append("\n## Executive Summary\n")
     metrics = summary["metrics_summary"]
     total = summary['total_apps']
+
+    # Top-level metrics
+    md.append(f"**📊 Overall Quality Score:** {metrics['avg_appeval_100']:.1f}/100")
+    if metrics.get('avg_eff_units') is not None:
+        md.append(f"**⚡ Average Efficiency:** {metrics['avg_eff_units']:.1f} units (lower is better)\n")
+    else:
+        md.append("")
 
     md.append("### Core Functionality (Metrics 1-4)")
     md.append(f"- **Build Success:** {metrics['build_success']}/{total} apps ({metrics['build_success']/total*100:.1f}%)")
@@ -941,6 +951,11 @@ async def main_async():
     print("=" * 60)
     metrics = summary["metrics_summary"]
     total = summary['total_apps']
+
+    # Top-level metrics
+    print(f"\n📊 Overall Quality Score: {metrics['avg_appeval_100']:.1f}/100")
+    if metrics.get('avg_eff_units') is not None:
+        print(f"⚡ Average Efficiency:    {metrics['avg_eff_units']:.1f} units (lower is better)")
 
     print("\nCore Functionality:")
     print(f"  1. Build Success:         {metrics['build_success']}/{total} ({metrics['build_success']/total*100:.0f}%)")
