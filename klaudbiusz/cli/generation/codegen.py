@@ -95,11 +95,7 @@ Use up to 10 tools per call to speed up the process.
 Never deploy the app, just scaffold and build it.
 """
 
-        disallowed_tools = [
-            "NotebookEdit",
-            "WebSearch",
-            "WebFetch",
-        ]
+        disallowed_tools = ["NotebookEdit", "WebSearch", "WebFetch", "Bash"]
 
         command, args = build_mcp_command(self.mcp_binary, self.mcp_manifest, self.mcp_json_path, self.mcp_args)
 
@@ -169,6 +165,13 @@ Never deploy the app, just scaffold and build it.
                 print(f"\n❌ Error: {e}", file=sys.stderr)
             raise
         finally:
+            # fallback: detect app_dir from filesystem if not tracked
+            if not self.scaffold_tracker.app_dir:
+                detected = self.scaffold_tracker.detect_from_filesystem(self.output_dir)
+                if detected:
+                    self.scaffold_tracker.app_dir = detected
+                    logger.info(f"📁 Detected app directory from filesystem: {detected}")
+
             # save trajectory via tracker
             await self.tracker.save(
                 prompt=prompt,

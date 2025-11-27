@@ -76,14 +76,16 @@ class Tracker:
         if not self.suppress_logs:
             logger.info(f"{emoji} {text}")
 
-        self.trajectory_messages.append(Message(
-            role=role,
-            content=text,
-            tool_calls=None,
-            tool_results=None,
-            timestamp=datetime.now(timezone.utc),
-            tokens=None,
-        ))
+        self.trajectory_messages.append(
+            Message(
+                role=role,
+                content=text,
+                tool_calls=None,
+                tool_results=None,
+                timestamp=datetime.now(timezone.utc),
+                tokens=None,
+            )
+        )
 
     def log_tool_call(self, tool_name: str, arguments: dict[str, Any], tool_id: str) -> None:
         """Log tool call from assistant.
@@ -100,14 +102,16 @@ class Tracker:
             logger.info(f"🔧 Tool: {tool_name}({truncated})")
 
         # trajectory collection
-        self.trajectory_messages.append(Message(
-            role="assistant",
-            content=None,
-            tool_calls=[ToolCall(id=tool_id, name=tool_name, arguments=arguments)],
-            tool_results=None,
-            timestamp=datetime.now(timezone.utc),
-            tokens=None,
-        ))
+        self.trajectory_messages.append(
+            Message(
+                role="assistant",
+                content=None,
+                tool_calls=[ToolCall(id=tool_id, name=tool_name, arguments=arguments)],
+                tool_results=None,
+                timestamp=datetime.now(timezone.utc),
+                tokens=None,
+            )
+        )
 
     def log_tool_result(self, tool_id: str, result: str, is_error: bool = False) -> None:
         """Log tool result from environment.
@@ -126,14 +130,16 @@ class Tracker:
                 logger.info(f"✅ Tool result: {truncated}")
 
         # trajectory collection
-        self.trajectory_messages.append(Message(
-            role="tool",
-            content=None,
-            tool_calls=None,
-            tool_results=[ToolResult(tool_call_id=tool_id, content=result, is_error=is_error)],
-            timestamp=datetime.now(timezone.utc),
-            tokens=None,
-        ))
+        self.trajectory_messages.append(
+            Message(
+                role="tool",
+                content=None,
+                tool_calls=None,
+                tool_results=[ToolResult(tool_call_id=tool_id, content=result, is_error=is_error)],
+                timestamp=datetime.now(timezone.utc),
+                tokens=None,
+            )
+        )
 
     def log_subagent_invoke(self, subagent_type: str, description: str, prompt: str) -> None:
         """Log subagent delegation (Claude SDK specific)."""
@@ -144,14 +150,16 @@ class Tracker:
             logger.info(f"   Instructions: {truncated}")
 
         # add to trajectory as assistant message (contextual info)
-        self.trajectory_messages.append(Message(
-            role="assistant",
-            content=f"[Delegating to subagent: {subagent_type}] {description}",
-            tool_calls=None,
-            tool_results=None,
-            timestamp=datetime.now(timezone.utc),
-            tokens=None,
-        ))
+        self.trajectory_messages.append(
+            Message(
+                role="assistant",
+                content=f"[Delegating to subagent: {subagent_type}] {description}",
+                tool_calls=None,
+                tool_results=None,
+                timestamp=datetime.now(timezone.utc),
+                tokens=None,
+            )
+        )
 
     def log_todo_update(self, todos: list[dict[str, Any]]) -> None:
         """Log todo list update."""
@@ -165,14 +173,16 @@ class Tracker:
 
         # add to trajectory as assistant message (contextual info)
         summary = f"Todo update: {sum(1 for t in todos if t.get('status') == 'completed')}/{len(todos)} completed"
-        self.trajectory_messages.append(Message(
-            role="assistant",
-            content=f"[{summary}]",
-            tool_calls=None,
-            tool_results=None,
-            timestamp=datetime.now(timezone.utc),
-            tokens=None,
-        ))
+        self.trajectory_messages.append(
+            Message(
+                role="assistant",
+                content=f"[{summary}]",
+                tool_calls=None,
+                tool_results=None,
+                timestamp=datetime.now(timezone.utc),
+                tokens=None,
+            )
+        )
 
     def log_session_complete(
         self,
@@ -219,6 +229,9 @@ class Tracker:
         if not self.trajectory_messages:
             return
 
+        if not self.app_name:
+            logger.warning("⚠️ App name not set, skipping trajectory save")
+
         trajectory = Trajectory(
             run_id=str(self.run_id),
             app_name=self.app_name,
@@ -261,6 +274,36 @@ class ScaffoldTracker:
         if tool_id in self._pending:
             self.app_dir = self._pending.pop(tool_id)
 
+    def detect_from_filesystem(self, search_root: Path | None = None) -> str | None:
+        """Fallback: detect scaffold by finding package.json at top level.
+
+        Globs for package.json and chooses the one closest to search_root.
+        This works in dagger environments where /workspace is the base.
+
+        Args:
+            search_root: Root directory to search from (e.g., /workspace or output_dir)
+
+        Returns:
+            Path to detected app directory, or None if not found
+        """
+        if search_root is None:
+            search_root = Path("/workspace")
+
+        if not search_root.exists():
+            logger.warning(f"⚠️ Search root does not exist: {search_root}")
+            return None
+
+        logger.info(f"🔍 Searching for scaffolded app directory under {search_root}")
+        # glob for all package.json files
+        marker_files = list(search_root.glob("**/databricks.yml"))
+        if not marker_files:
+            logger.warning("⚠️ Could not detect scaffolded app directory from filesystem")
+
+        file, *_ = marker_files
+        app_dir = file.parent
+        logger.info(f"✅ Detected scaffolded app directory: {app_dir}")
+        return str(app_dir)
+
 
 def validate_mcp_manifest(mcp_binary: str | None, project_root: Path) -> Path | None:
     """Validate MCP manifest exists if using cargo run.
@@ -293,6 +336,7 @@ def setup_logging(suppress_logs: bool, mcp_binary: str | None = None) -> None:
     else:
         try:
             import coloredlogs  # type: ignore[import-untyped]
+
             coloredlogs.install(level="INFO")
         except ImportError:
             logging.basicConfig(level=logging.INFO)
