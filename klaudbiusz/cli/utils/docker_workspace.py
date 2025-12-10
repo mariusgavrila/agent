@@ -51,6 +51,7 @@ class DockerWorkspace:
             "--name", container_name,
             "-v", f"{app_dir.resolve()}:/app",
             "-w", "/app",
+            "--security-opt", "apparmor=unconfined",  # Disable AppArmor for Databricks
         ]
 
         # Add environment variables
