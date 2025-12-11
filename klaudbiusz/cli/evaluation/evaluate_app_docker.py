@@ -302,9 +302,19 @@ def evaluate_app_docker_with_metadata(
         result = evaluate_app_docker(app_dir, prompt, port, fast_mode=fast_mode)
         result_dict = asdict(result)
 
-        # Add generation metrics if available
-        if app_dir.name in gen_metrics:
-            result_dict["generation_metrics"] = gen_metrics[app_dir.name]
+        # Add generation metrics if available (from bulk_run results or generation_metrics.json)
+        import json
+        gm = gen_metrics.get(app_dir.name)
+        if not gm:
+            # Fallback: read from generation_metrics.json in app directory
+            metrics_file = app_dir / "generation_metrics.json"
+            if metrics_file.exists():
+                try:
+                    gm = json.loads(metrics_file.read_text())
+                except Exception:
+                    pass
+        if gm:
+            result_dict["generation_metrics"] = gm
 
         return result_dict
 

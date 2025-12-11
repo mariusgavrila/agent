@@ -184,14 +184,18 @@ def main(
         {
             "app_name": name,
             "success": err is None,
+            "prompt": selected_prompts.get(name),
             "app_dir": str(app_dir) if app_dir else None,
             "log_file": str(log) if log else None,
             "error": err,
             "backend": backend,
             "model": model,
-            "cost_usd": metrics.get("cost_usd") if metrics else None,
-            "tokens": metrics.get("input_tokens") if metrics else None,
-            "turns": metrics.get("turns") if metrics else None,
+            "metrics": {
+                "cost_usd": metrics.get("cost_usd"),
+                "input_tokens": metrics.get("input_tokens"),
+                "output_tokens": metrics.get("output_tokens"),
+                "turns": metrics.get("turns"),
+            } if metrics else None,
         }
         for name, app_dir, log, metrics, err in results
     ]

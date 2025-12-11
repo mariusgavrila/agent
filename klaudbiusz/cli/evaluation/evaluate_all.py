@@ -97,11 +97,22 @@ def load_prompts_and_metrics_from_bulk_run() -> tuple[dict[str, str], dict[str, 
                 "model": first_result.get("model"),
             }
 
-        # Create a prompt->metrics mapping
+        # Create a prompt->metrics mapping (handle both old and new format)
         prompt_to_metrics = {}
+        app_to_metrics = {}
         for result in data:
             prompt = result.get("prompt")
-            metrics = result.get("metrics", {})
+            app_name = result.get("app_name")
+            # New format: metrics nested under "metrics" key
+            metrics = result.get("metrics") or {}
+            # Old format fallback: metrics at top level
+            if not metrics:
+                metrics = {
+                    "cost_usd": result.get("cost_usd", 0),
+                    "input_tokens": result.get("tokens", 0),  # old format used "tokens"
+                    "output_tokens": 0,  # old format didn't have output_tokens
+                    "turns": result.get("turns", 0),
+                }
             if prompt:
                 prompt_to_metrics[prompt] = {
                     "cost_usd": metrics.get("cost_usd", 0),
@@ -109,11 +120,20 @@ def load_prompts_and_metrics_from_bulk_run() -> tuple[dict[str, str], dict[str, 
                     "output_tokens": metrics.get("output_tokens", 0),
                     "turns": metrics.get("turns", 0),
                 }
+            if app_name:
+                app_to_metrics[app_name] = {
+                    "cost_usd": metrics.get("cost_usd", 0),
+                    "input_tokens": metrics.get("input_tokens", 0),
+                    "output_tokens": metrics.get("output_tokens", 0),
+                    "turns": metrics.get("turns", 0),
+                }
 
-        # Match app names to metrics using PROMPTS dict
+        # Match app names to metrics using PROMPTS dict or direct app_name mapping
         gen_metrics = {}
         for app_name, prompt in PROMPTS.items():
-            if prompt in prompt_to_metrics:
+            if app_name in app_to_metrics:
+                gen_metrics[app_name] = app_to_metrics[app_name]
+            elif prompt in prompt_to_metrics:
                 gen_metrics[app_name] = prompt_to_metrics[prompt]
 
         return dict(PROMPTS), gen_metrics, run_config
@@ -841,10 +861,19 @@ async def main_async():
                 result = await evaluate_app_async(client, app_dir, prompt, port, fast_mode=fast_mode)
                 result_dict = asdict(result)
 
-                if app_dir.name in gen_metrics:
-                    result_dict["generation_metrics"] = gen_metrics[app_dir.name]
+                # Try to get generation metrics from bulk_run results or generation_metrics.json
+                gm = gen_metrics.get(app_dir.name)
+                if not gm:
+                    # Fallback: read from generation_metrics.json in app directory
+                    metrics_file = app_dir / "generation_metrics.json"
+                    if metrics_file.exists():
+                        try:
+                            gm = json.loads(metrics_file.read_text())
+                        except Exception:
+                            pass
+                if gm:
+                    result_dict["generation_metrics"] = gm
                     if result_dict["metrics"].get("eff_units") is None:
-                        gm = gen_metrics[app_dir.name]
                         tokens = gm.get("input_tokens", 0) + gm.get("output_tokens", 0)
                         result_dict["metrics"]["eff_units"] = eff_units(
                             tokens_used=tokens if tokens > 0 else None,
