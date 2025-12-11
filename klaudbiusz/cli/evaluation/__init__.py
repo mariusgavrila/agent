@@ -12,7 +12,6 @@ High-level API for running evaluations:
 
 import asyncio
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +38,8 @@ def run_evaluation_simple(
         mlflow_experiment: Optional MLflow experiment name for logging results.
         parallelism: Number of parallel evaluations (default: 4).
         fast_mode: Skip slow LLM/VLM checks for faster evaluation (default: True).
-        no_dagger: Use Docker CLI instead of Dagger. Auto-detected if None.
+        no_dagger: Run without any containers (no Dagger, no Docker).
+                   Apps with Dockerfiles will be skipped. Auto-detected if None.
 
     Returns:
         Evaluation report dict with 'summary' and 'apps' keys.
@@ -90,22 +90,48 @@ def run_evaluation_simple(
     eval_start = time.time()
 
     if no_dagger:
-        from cli.evaluation.evaluate_app_docker import evaluate_app_docker_with_metadata
+        from dataclasses import asdict
+        from cli.evaluation.evaluate_app import evaluate_app
+
+        # Filter out apps with Dockerfiles (they require Docker)
+        docker_apps = [d for d in app_dirs if (d / "Dockerfile").exists()]
+        non_docker_apps = [d for d in app_dirs if not (d / "Dockerfile").exists()]
+
+        if docker_apps:
+            print(f"Skipping {len(docker_apps)} apps with Dockerfiles (require Docker)")
+
+        if not non_docker_apps:
+            raise ValueError("No apps without Dockerfiles found. Use Dagger mode for Docker-based apps.")
+
+        app_dirs = non_docker_apps
 
         for i, app_dir in enumerate(app_dirs, 1):
             port = 8000 + i
-            result = evaluate_app_docker_with_metadata(
-                app_dir,
-                prompts.get(app_dir.name),
-                gen_metrics,
-                i,
-                len(app_dirs),
-                port=port,
-                fast_mode=fast_mode,
-            )
-            if result is not None:
-                results.append(result)
+            print(f"[{i}/{len(app_dirs)}] {app_dir.name}")
+            try:
+                result = evaluate_app(app_dir, prompts.get(app_dir.name), port)
+                result_dict = asdict(result)
+
+                # Add generation metrics if available
+                import json
+                gm = gen_metrics.get(app_dir.name)
+                if not gm:
+                    metrics_file = app_dir / "generation_metrics.json"
+                    if metrics_file.exists():
+                        try:
+                            gm = json.loads(metrics_file.read_text())
+                        except Exception:
+                            pass
+                if gm:
+                    result_dict["generation_metrics"] = gm
+
+                results.append(result_dict)
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"Error evaluating {app_dir.name}: {e}")
     else:
+        from dataclasses import asdict as asdict_fn
         import dagger
         from cli.evaluation.evaluate_app_dagger import evaluate_app_async
 
@@ -121,7 +147,7 @@ def run_evaluation_simple(
                             result = await evaluate_app_async(
                                 client, app_dir, prompts.get(app_dir.name), port, fast_mode=fast_mode
                             )
-                            result_dict = asdict(result)
+                            result_dict = asdict_fn(result)
                             if app_dir.name in gen_metrics:
                                 result_dict["generation_metrics"] = gen_metrics[app_dir.name]
                                 if result_dict["metrics"].get("eff_units") is None:

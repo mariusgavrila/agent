@@ -19,11 +19,9 @@ import argparse
 import asyncio
 import fnmatch
 import json
-import os
 import sys
 import time
 from collections import Counter, defaultdict
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -638,7 +636,7 @@ Examples:
         '--no-dagger',
         action='store_true',
         dest='no_dagger',
-        help='Run evaluation locally without containers (no Dagger, no Docker)'
+        help='Run evaluation locally without any containers (no Dagger, no Docker). Apps with Dockerfiles will be skipped.'
     )
 
     parser.add_argument(
@@ -786,8 +784,8 @@ async def main_async():
     app_dirs = filter_app_dirs(all_app_dirs, args)
 
     # Auto-detect CPU count if --parallel 0
-    import os
-    cpu_count = os.cpu_count() or 1
+    import os as os_module
+    cpu_count = os_module.cpu_count() or 1
     if args.parallel == 0:
         args.parallel = cpu_count
         print(f"🔧 Auto-detected {cpu_count} CPUs, using --parallel {args.parallel}")
@@ -832,7 +830,24 @@ async def main_async():
         from dataclasses import asdict
         from cli.evaluation.evaluate_app import evaluate_app
 
-        print("🔄 Running local evaluations (no containers)...")
+        # Filter out apps with Dockerfiles (they require Docker)
+        docker_apps = [d for d in app_dirs if (d / "Dockerfile").exists()]
+        non_docker_apps = [d for d in app_dirs if not (d / "Dockerfile").exists()]
+
+        if docker_apps:
+            print(f"⚠️  Skipping {len(docker_apps)} apps with Dockerfiles (require Docker):")
+            for app in docker_apps[:5]:
+                print(f"     - {app.name}")
+            if len(docker_apps) > 5:
+                print(f"     ... and {len(docker_apps) - 5} more")
+
+        if not non_docker_apps:
+            print("❌ Error: No apps without Dockerfiles found. Use Dagger mode for Docker-based apps.")
+            sys.exit(1)
+
+        app_dirs = non_docker_apps
+        print(f"🔄 Running local evaluations (no containers) for {len(app_dirs)} apps...")
+
         for i, app_dir in enumerate(app_dirs, 1):
             print(f"\n[{i}/{len(app_dirs)}] {app_dir.name}")
             port = 8000 + i
