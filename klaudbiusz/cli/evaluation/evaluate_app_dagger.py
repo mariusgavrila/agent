@@ -189,7 +189,7 @@ async def evaluate_app_async(
             # Use unique test port to avoid conflicts
             test_port = port + 1000
             try:
-                test_result = await run_tests(workspace, test_port)
+                test_result = await run_tests(workspace, test_port, fast_mode=fast_mode)
                 tests_pass = test_result.exit_code == 0
                 metrics.tests_pass = tests_pass
 
